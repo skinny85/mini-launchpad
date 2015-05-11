@@ -1,0 +1,20 @@
+@(form: Form[LaunchpadCtrl.LaunchpadViewModel])
+
+@templates.main("Launchpad") {
+    <p>
+        Input your AWS credentials and press 'Submit'.
+        That will provision a new Wordpress instance on your account.
+    </p>
+
+    <form action="@routes.LaunchpadCtrl.post" method="post">
+        <input type="hidden" name="dryRun" value="@form("dryRun").value">
+
+        <label for="aws-api-key">AWS API Key</label>
+        <input type="text" name="awsApiKey" id="aws-api-key">
+
+        <label for="aws-api-secret">AWS API Secret</label>
+        <input type="text" name="awsApiSecret" id="aws-api-secret">
+
+        <input type="submit" value="Submit">
+    </form>
+}

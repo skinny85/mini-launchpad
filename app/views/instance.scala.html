@@ -1,0 +1,77 @@
+@(instance: Ec2Instance)
+
+@templates.main("Launchpad") {
+    <h3>Instance</h3>
+
+    <dl>
+        <dt>ID</dt>
+        <dd>@instance.id</dd>
+
+        @if(instance.isNamed){
+            <dt>Name</dt>
+            <dd>@instance.name</dd>
+        }
+    </dl>
+
+    <div id="pendingBlock"
+            style="display: @(if (instance.state == Ec2InstanceState.Pending) "block" else "none")">
+        <img src="@routes.Assets.at("images/spinner.gif")" alt="spinner"
+            style="width: 10%; height: 10%">
+        <p>
+            Your instance is being provisioned...
+        </p>
+    </div>
+
+    <div id="runningBlock"
+            style="display: @(if (instance.state == Ec2InstanceState.Running) "block" else "none")">
+        <p>
+            Your instance is running. Click
+            <a href="http://xxx" target="_blank">here</a>
+            to access it.
+        </p>
+
+        <form action="@routes.LaunchpadCtrl.terminate(instance.id)" method="post">
+            <input type="submit" value="Terminate instance"
+                onclick="return confirm('Are you sure you want to terminate instance \'@instance.id\'? ' +
+                 'This operation cannot be undone!')">
+        </form>
+    </div>
+
+    <div id="otherBlock" style="display: @(if (instance.state != Ec2InstanceState.Running &&
+            instance.state != Ec2InstanceState.Pending) "block" else "none")">
+        <p>
+            Your instance is in the state: <b id="otherBlockState">@instance.state</b>
+        </p>
+    </div>
+
+    <p>
+        <a href="@routes.LaunchpadCtrl.get()">Back to main page</a>
+    </p>
+
+    <script type="text/javascript" language="JavaScript">
+        var url = 'ws://' + window.location.hostname + ':' + window.location.port +
+            '/websocket/@instance.id';
+        var socket = new WebSocket(url);
+
+        socket.onmessage = function (event) {
+            var pendingDisplay = 'none', runDisplay = 'none', otherDisplay = 'none';
+
+            var msg = JSON.parse(event.data);
+            switch (msg.state) {
+                case 'Pending':
+                    pendingDisplay = 'block';
+                    break;
+                case 'Running':
+                    runDisplay = 'block';
+                    $('#runningBlock p a').attr('href', 'http://' + msg.publicDnsName);
+                    break;
+                default:
+                    otherDisplay = 'block';
+                    $('#otherBlockState').html(msg.state);
+            }
+            $('#pendingBlock').css('display', pendingDisplay);
+            $('#runningBlock').css('display', runDisplay);
+            $('#otherBlock').css('display', otherDisplay);
+        };
+    </script>
+}
