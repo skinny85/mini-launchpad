@@ -10,6 +10,9 @@ import play.api.Play.current
 
 import play.api.libs.json._
 import play.api.mvc.WebSocket.FrameFormatter
+import play.twirl.api.Html
+
+import scala.util.{Failure, Success}
 
 object LaunchpadCtrl extends Controller {
   case class LaunchpadViewModel(awsApiKey: String, awsApiSecret: String, dryRun: Boolean)
@@ -39,20 +42,39 @@ object LaunchpadCtrl extends Controller {
         val ec2Client = new Ec2Client(launchpad.awsApiKey,
           launchpad.awsApiSecret)
 
-        val call = if (launchpad.dryRun) {
-          val instances = ec2Client.instances()
-          routes.LaunchpadCtrl.instance(instances.head.id)
+        val maybeCall: Either[Html, Call] = if (launchpad.dryRun) {
+          ec2Client.instances() match {
+            case Success(instances) =>
+              Right(routes.LaunchpadCtrl.instance(instances.head.id))
+            case Failure(e) =>
+              awsInstanceErrorContent(e)
+          }
         } else {
-          val instanceId = ec2Client.createInstance(BitnamiWordpressAmi_4_2_2_0_64bit)
-          routes.LaunchpadCtrl.instance(instanceId)
+          ec2Client.createInstance(BitnamiWordpressAmi_4_2_2_0_64bit) match {
+            case Failure(e) =>
+              awsInstanceErrorContent(e)
+            case Success(instanceId) =>
+              Right(routes.LaunchpadCtrl.instance(instanceId))
+          }
         }
 
-        Redirect(call).withSession(
-          AWS_KEY -> launchpad.awsApiKey,
-          AWS_SECRET -> launchpad.awsApiSecret
-        )
+        maybeCall match {
+          case Left(content) =>
+            BadRequest(content)
+          case Right(call) =>
+            Redirect(call).withSession(
+              AWS_KEY -> launchpad.awsApiKey,
+              AWS_SECRET -> launchpad.awsApiSecret
+            )
+        }
       }
     )
+  }
+
+  private def awsInstanceErrorContent(e: Throwable): Left[Html, Nothing] = {
+    Left(views.html.launch(launchpadForm.withGlobalError(
+      s"""|There was an error processing your request (${e.getMessage}).
+          |Make sure the AWS credentials are entered correctly and try again.""".stripMargin)))
   }
 
   def instance(id: String) = Action { req =>
@@ -62,8 +84,12 @@ object LaunchpadCtrl extends Controller {
 
   def terminate(id: String) = Action { req =>
     val ec2Client = makeEc2ClientFromSession(req.session)
-    ec2Client.terminateInstance(id)
-    Ok(views.html.terminated(id))
+    ec2Client.terminateInstance(id) match {
+      case Failure(e) =>
+        BadRequest(views.html.instance(Failure(e)))
+      case Success(_) =>
+        Redirect(routes.LaunchpadCtrl.instance(id))
+    }
   }
 
   def websocket(instanceId: String) = WebSocket.acceptWithActor[String, Ec2InstanceStateActorRes] { req => {

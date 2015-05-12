@@ -1,77 +1,97 @@
-@(instance: Ec2Instance)
+@(instanceTry: scala.util.Try[Option[Ec2Instance]])
 
 @templates.main("Launchpad") {
-    <h3>Instance</h3>
-
-    <dl>
-        <dt>ID</dt>
-        <dd>@instance.id</dd>
-
-        @if(instance.isNamed){
-            <dt>Name</dt>
-            <dd>@instance.name</dd>
+    @if(instanceTry.isFailure) {
+        @defining(instanceTry.failed.get) { e =>
+          <p>
+              There was an error issuing the request (@e.getMessage).
+          </p>
         }
-    </dl>
+    } else {
+        @defining(instanceTry.get) { maybeInstance =>
+            @if(maybeInstance.isEmpty) {
+                <p>
+                    There doesn't exist such an instance!
+                </p>
+            } else {
+                @defining(maybeInstance.get) { instance =>
+                    <h3>Instance</h3>
 
-    <div id="pendingBlock"
-            style="display: @(if (instance.state == Ec2InstanceState.Pending) "block" else "none")">
-        <img src="@routes.Assets.at("images/spinner.gif")" alt="spinner"
-            style="width: 10%; height: 10%">
-        <p>
-            Your instance is being provisioned...
-        </p>
-    </div>
+                    <dl>
+                        <dt>ID</dt>
+                        <dd>@instance.id</dd>
 
-    <div id="runningBlock"
-            style="display: @(if (instance.state == Ec2InstanceState.Running) "block" else "none")">
-        <p>
-            Your instance is running. Click
-            <a href="http://xxx" target="_blank">here</a>
-            to access it.
-        </p>
+                        @if(instance.isNamed){
+                            <dt>Name</dt>
+                            <dd>@instance.name</dd>
+                        }
+                    </dl>
 
-        <form action="@routes.LaunchpadCtrl.terminate(instance.id)" method="post">
-            <input type="submit" value="Terminate instance"
-                onclick="return confirm('Are you sure you want to terminate instance \'@instance.id\'? ' +
-                 'This operation cannot be undone!')">
-        </form>
-    </div>
+                    <div id="pendingBlock"
+                            style="display: @(if (instance.state == Ec2InstanceState.Pending) "block" else "none")">
+                        <img src="@routes.Assets.at("images/spinner.gif")" alt="spinner"
+                        style="width: 10%; height: 10%">
+                        <p>
+                            Your instance is being provisioned...
+                        </p>
+                    </div>
 
-    <div id="otherBlock" style="display: @(if (instance.state != Ec2InstanceState.Running &&
-            instance.state != Ec2InstanceState.Pending) "block" else "none")">
-        <p>
-            Your instance is in the state: <b id="otherBlockState">@instance.state</b>
-        </p>
-    </div>
+                    <div id="runningBlock"
+                            style="display: @(if (instance.state == Ec2InstanceState.Running) "block" else "none")">
+                        <p>
+                            Your instance is running. Click
+                            <a href="http://xxx" target="_blank">here</a>
+                            to access it.
+                        </p>
 
-    <p>
-        <a href="@routes.LaunchpadCtrl.get()">Back to main page</a>
-    </p>
+                        <form action="@routes.LaunchpadCtrl.terminate(instance.id)" method="post">
+                            <input type="submit" value="Terminate instance"
+                            onclick="return confirm('Are you sure you want to terminate instance \'@instance.id\'? ' +
+                                'This operation cannot be undone!')">
+                        </form>
+                    </div>
 
-    <script type="text/javascript" language="JavaScript">
-        var url = 'ws://' + window.location.hostname + ':' + window.location.port +
-            '/websocket/@instance.id';
-        var socket = new WebSocket(url);
+                    <div id="otherBlock" style="display: @(if (instance.state != Ec2InstanceState.Running &&
+                            instance.state != Ec2InstanceState.Pending) "block" else "none")">
+                        <p>
+                            Your instance is in the state: <b id="otherBlockState">@instance.state</b>
+                        </p>
+                    </div>
 
-        socket.onmessage = function (event) {
-            var pendingDisplay = 'none', runDisplay = 'none', otherDisplay = 'none';
+                    <script type="text/javascript" language="JavaScript">
+                        var url = 'ws://' + window.location.hostname + ':' + window.location.port +
+                            '/websocket/@instance.id';
+                        var socket = new WebSocket(url);
 
-            var msg = JSON.parse(event.data);
-            switch (msg.state) {
-                case 'Pending':
-                    pendingDisplay = 'block';
-                    break;
-                case 'Running':
-                    runDisplay = 'block';
-                    $('#runningBlock p a').attr('href', 'http://' + msg.publicDnsName);
-                    break;
-                default:
-                    otherDisplay = 'block';
-                    $('#otherBlockState').html(msg.state);
+                        socket.onmessage = function (event) {
+                            console.log("WebSocket message received");
+
+                            var pendingDisplay = 'none', runDisplay = 'none', otherDisplay = 'none';
+
+                            var msg = JSON.parse(event.data);
+                            switch (msg.state) {
+                                case 'Pending':
+                                    pendingDisplay = 'block';
+                                    break;
+                                case 'Running':
+                                    runDisplay = 'block';
+                                    $('#runningBlock p a').attr('href', 'http://' + msg.publicDnsName);
+                                    break;
+                                default:
+                                    otherDisplay = 'block';
+                                    $('#otherBlockState').html(msg.state);
+                            }
+                            $('#pendingBlock').css('display', pendingDisplay);
+                            $('#runningBlock').css('display', runDisplay);
+                            $('#otherBlock').css('display', otherDisplay);
+                        };
+                    </script>
+                }
             }
-            $('#pendingBlock').css('display', pendingDisplay);
-            $('#runningBlock').css('display', runDisplay);
-            $('#otherBlock').css('display', otherDisplay);
-        };
-    </script>
+        }
+    }
 }
+
+<p>
+    <a href="@routes.LaunchpadCtrl.get()">Back to main page</a>
+</p>

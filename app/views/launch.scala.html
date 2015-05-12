@@ -16,5 +16,13 @@
         <input type="text" name="awsApiSecret" id="aws-api-secret">
 
         <input type="submit" value="Submit">
+
+        @if(form.hasGlobalErrors){
+            @for(error <- form.globalErrors) {
+                <p>
+                    @error.message
+                </p>
+            }
+        }
     </form>
 }

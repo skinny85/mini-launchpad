@@ -2,7 +2,9 @@ package models
 
 import akka.actor._
 import models.Ec2InstanceState.Ec2InstanceState
+import play.api.Logger
 import scala.concurrent.duration._
+import scala.util.{Success, Failure}
 
 object Ec2InstanceStateActor {
   def props(ec2client: Ec2Client, instanceId: String, out: ActorRef) =
@@ -18,13 +20,27 @@ class Ec2InstanceStateActor(ec2Client: Ec2Client, instanceId: String,
 
   def receive = {
     case _ =>
-      val instance = ec2Client.instance(instanceId)
-      out ! Ec2InstanceStateActorRes(instance.state, instance.publicDnsName)
-      if (instance.state != Ec2InstanceState.Running)
-        scheduleTick()
-      else
-        // we close the WebSocket
-        self ! PoisonPill
+      ec2Client.instance(instanceId) match {
+        case Failure(e) =>
+          Logger.warn("Error checking instance state", e)
+          // client probably broken - no point keeping the connection
+          closeWebsocket()
+        case Success(maybeInstance) => maybeInstance match {
+          case None =>
+            // no such instance - nothing more to do
+            closeWebsocket()
+          case Some(instance) =>
+            out ! Ec2InstanceStateActorRes(instance.state, instance.publicDnsName)
+            if (instance.state != Ec2InstanceState.Running)
+              scheduleTick()
+            else
+              closeWebsocket()
+        }
+      }
+  }
+
+  private def closeWebsocket() {
+    self ! PoisonPill
   }
 
   private def scheduleTick(): Unit = {
